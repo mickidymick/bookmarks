@@ -30,9 +30,16 @@ static void _init_bookmarks(yed_event *event);
 static void _add_bookmarks_to_buffer(yed_event *event);
 static void _write_back_bookmarks(void);
 static void _bookmarks_line_handler(yed_event *event);
+static void _set(yed_frame *frame, int row);
+static void _remove(yed_frame *frame, int row);
+static int  _cmpintp(const void *a, const void *b);
 
 void set_new_bookmark(int nargs, char **args);
+void set_new_bookmark_on_line(int nargs, char **args);
 void remove_bookmark(int nargs, char **args);
+void remove_bookmark_on_line(int nargs, char **args);
+void goto_next_bookmark_in_buffer(int nargs, char **args);
+void goto_prev_bookmark_in_buffer(int nargs, char **args);
 
 int yed_plugin_boot(yed_plugin *self) {
     yed_event_handler h1;
@@ -60,7 +67,15 @@ int yed_plugin_boot(yed_plugin *self) {
     yed_plugin_add_event_handler(self, h2);
 
     yed_plugin_set_command(self, "set-bookmark", set_new_bookmark);
+    yed_plugin_set_command(self, "set-bookmark-on-line", set_new_bookmark_on_line);
     yed_plugin_set_command(self, "remove-bookmark", remove_bookmark);
+    yed_plugin_set_command(self, "remove-bookmark-on-line", remove_bookmark_on_line);
+    yed_plugin_set_command(self, "goto-next-bookmark-in-buffer", goto_next_bookmark_in_buffer);
+    yed_plugin_set_command(self, "goto-prev-bookmark-in-buffer", goto_prev_bookmark_in_buffer);
+
+    if (yed_get_var("bookmark-character") == NULL) {
+        yed_set_var("bookmark-character", "▓");
+    }
 
     return 0;
 }
@@ -86,7 +101,6 @@ void _bookmarks_line_handler(yed_event *event) {
     }
 
     n_lines = yed_buff_n_lines(event->frame->buffer);
-/*     n_cols  = n_digits(n_lines) + 2; */
     n_cols  = 3;
 
     if (event->frame->gutter_width != n_cols) {
@@ -112,7 +126,7 @@ void _bookmarks_line_handler(yed_event *event) {
         array_traverse(tmp.rows, r_it) {
             if (*r_it == event->row) {
                 snprintf(num_buff, sizeof(num_buff),
-                        " %*s ", n_cols - 2, "▓");
+                        " %*s ", n_cols - 2, yed_get_var("bookmark-character"));
                 found = 1;
                 break;
             }
@@ -138,14 +152,16 @@ static void _unload(yed_plugin *self) {
 
 }
 
-void remove_bookmark(int nargs, char **args) {
+static int _cmpintp(const void *a, const void *b) {
+    return ( *(int*)a - *(int*)b );
+}
+
+void goto_next_bookmark_in_buffer(int nargs, char **args) {
     char             file_name[512];
-    bookmark_data_t  tmp;
     yed_frame       *frame;
-    int              idx;
-    int              j;
-    int              found;
+    bookmark_data_t  tmp;
     int             *r_it;
+    int              row;
 
     frame = ys->active_frame;
 
@@ -155,6 +171,78 @@ void remove_bookmark(int nargs, char **args) {
     ||  frame->buffer->kind != BUFF_KIND_FILE) {
         return;
     }
+
+    tree_it(yedrc_path_t, bookmark_data_t) it;
+    abs_path(frame->buffer->path, file_name);
+
+    it = tree_lookup(bookmarks, file_name);
+    row = 0;
+    if ( tree_it_good(it) ) {
+        tmp = tree_it_val(it);
+        if (array_len(tmp.rows) > 0) {
+            array_traverse(tmp.rows, r_it) {
+                if (*r_it > frame->cursor_line) {
+                    row = *r_it;
+                    break;
+                }
+            }
+
+            if (!row) {
+                row = *(int *) array_item(tmp.rows, 0);
+            }
+
+            yed_set_cursor_within_frame(frame, row, frame->cursor_col);
+        }
+    }
+}
+
+void goto_prev_bookmark_in_buffer(int nargs, char **args) {
+    char             file_name[512];
+    yed_frame       *frame;
+    bookmark_data_t  tmp;
+    int             *r_it;
+    int              row;
+
+    frame = ys->active_frame;
+
+    if (!frame
+    ||  !frame->buffer
+    ||  frame->buffer->path == NULL
+    ||  frame->buffer->kind != BUFF_KIND_FILE) {
+        return;
+    }
+
+    tree_it(yedrc_path_t, bookmark_data_t) it;
+    abs_path(frame->buffer->path, file_name);
+
+    it = tree_lookup(bookmarks, file_name);
+    row = 0;
+    if ( tree_it_good(it) ) {
+        tmp = tree_it_val(it);
+        if (array_len(tmp.rows) > 0) {
+            array_rtraverse(tmp.rows, r_it) {
+                if (*r_it < frame->cursor_line) {
+                    row = *r_it;
+                    break;
+                }
+            }
+
+            if (!row) {
+                row = *(int *) array_last(tmp.rows);
+            }
+
+            yed_set_cursor_within_frame(frame, row, frame->cursor_col);
+        }
+    }
+}
+
+static void _remove(yed_frame *frame, int row) {
+    char             file_name[512];
+    bookmark_data_t  tmp;
+    int              idx;
+    int              j;
+    int              found;
+    int             *r_it;
 
     tree_it(yedrc_path_t, bookmark_data_t) it;
     abs_path(frame->buffer->path, file_name);
@@ -169,7 +257,7 @@ void remove_bookmark(int nargs, char **args) {
                 array_delete(tree_it_val(it).rows, idx);
                 found = 1;
                 LOG_FN_ENTER();
-                yed_log("Bookmark removed at line %d\n", ys->active_frame->cursor_line);
+                yed_log("Bookmark removed at line %d\n", row);
                 LOG_EXIT();
                 break;
             }
@@ -183,21 +271,11 @@ void remove_bookmark(int nargs, char **args) {
         yed_cerr("No bookmark exists for this line!\n");
     }
 
-/*     tree_traverse(bookmarks, it) { */
-/*         array_traverse(tree_it_val(it).rows, r_it) { */
-/*             DBG("%s %d\n", tree_it_key(it), *r_it); */
-/*         } */
-/*     } */
-
     _write_back_bookmarks();
 }
 
-void set_new_bookmark(int nargs, char **args) {
-    char             file_name[512];
-    bookmark_data_t  tmp;
+void remove_bookmark(int nargs, char **args) {
     yed_frame       *frame;
-    int              i;
-    int             *r_it;
 
     frame = ys->active_frame;
 
@@ -207,6 +285,35 @@ void set_new_bookmark(int nargs, char **args) {
     ||  frame->buffer->kind != BUFF_KIND_FILE) {
         return;
     }
+
+    if (nargs != 1) {
+        yed_cerr("Missing row parameter!\n");
+        return;
+    }
+    _remove(frame, atoi(args[1]));
+}
+
+void remove_bookmark_on_line(int nargs, char **args) {
+    yed_frame       *frame;
+
+    frame = ys->active_frame;
+
+    if (!frame
+    ||  !frame->buffer
+    ||  frame->buffer->path == NULL
+    ||  frame->buffer->kind != BUFF_KIND_FILE) {
+        return;
+    }
+
+    _remove(frame, ys->active_frame->cursor_line);
+}
+
+static void _set(yed_frame *frame, int row) {
+    char             file_name[512];
+    bookmark_data_t  tmp;
+    int              i;
+    int             *r_it;
+    array_t         *arr;
 
     tree_it(yedrc_path_t, bookmark_data_t) it;
     abs_path(frame->buffer->path, file_name);
@@ -221,9 +328,11 @@ void set_new_bookmark(int nargs, char **args) {
             }
         }
         array_push(tree_it_val(it).rows, ys->active_frame->cursor_line);
+        qsort((void *)(tree_it_val(it).rows.data), array_len(tree_it_val(it).rows), sizeof(int), _cmpintp);
     } else {
         tmp.rows = array_make(int);
         array_push(tmp.rows, ys->active_frame->cursor_line);
+        qsort((void *)tmp.rows.data, array_len(tmp.rows), sizeof(int), _cmpintp);
         tree_insert(bookmarks, strdup(frame->buffer->path), tmp);
     }
 
@@ -233,13 +342,43 @@ void set_new_bookmark(int nargs, char **args) {
 
 skip:;
 
-/*     tree_traverse(bookmarks, it) { */
-/*         array_traverse(tree_it_val(it).rows, r_it) { */
-/*             DBG("%s %d\n", tree_it_key(it), *r_it); */
-/*         } */
-/*     } */
-
     _write_back_bookmarks();
+}
+
+
+void set_new_bookmark(int nargs, char **args) {
+    yed_frame       *frame;
+
+    frame = ys->active_frame;
+
+    if (!frame
+    ||  !frame->buffer
+    ||  frame->buffer->path == NULL
+    ||  frame->buffer->kind != BUFF_KIND_FILE) {
+        return;
+    }
+
+    if (nargs != 1) {
+        yed_cerr("Missing row parameter!\n");
+        return;
+    }
+
+    _set(frame, atoi(args[1]));
+}
+
+void set_new_bookmark_on_line(int nargs, char **args) {
+    yed_frame       *frame;
+
+    frame = ys->active_frame;
+
+    if (!frame
+    ||  !frame->buffer
+    ||  frame->buffer->path == NULL
+    ||  frame->buffer->kind != BUFF_KIND_FILE) {
+        return;
+    }
+
+    _set(frame, ys->active_frame->cursor_line);
 }
 
 static void _add_bookmarks_to_buffer(yed_event *event) {
@@ -320,6 +459,7 @@ static void _init_bookmarks(yed_event *event) {
             row = atoi(tmp_row);
             array_push(tmp.rows, row);
         } else {
+            qsort((void *)tmp.rows.data, array_len(tmp.rows), sizeof(int), _cmpintp);
             tree_insert(bookmarks, strdup(tmp_path), tmp);
             tmp.rows = array_make(int);
             row      = atoi(tmp_row);
@@ -328,7 +468,12 @@ static void _init_bookmarks(yed_event *event) {
 
         last_path = tmp_path;
     }
-    tree_insert(bookmarks, strdup(tmp_path), tmp);
+
+    if (tmp_path != NULL) {
+        qsort((void *)tmp.rows.data, array_len(tmp.rows), sizeof(int), _cmpintp);
+        tree_insert(bookmarks, strdup(tmp_path), tmp);
+    }
+
     fclose(fp);
     yed_delete_event_handler(h);
 
@@ -382,6 +527,7 @@ void _write_back_bookmarks(void) {
             row = atoi(tmp_row);
             array_push(tmp.rows, row);
         } else {
+            qsort((void *)tmp.rows.data, array_len(tmp.rows), sizeof(int), _cmpintp);
             tree_insert(bookmarks, strdup(tmp_path), tmp);
             tmp.rows = array_make(int);
             row = atoi(tmp_row);

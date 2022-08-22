@@ -2,9 +2,14 @@
 .SH NAME
 bookmarks \- lets you bookmark lines of code to return to later.
 .SH CONFIGURATION
-.SS None
+.SS bookmark-character: the character that shows if there is a bookmark on the line.
 .SH COMMANDS
-.SS None
+.SS set-bookmark:[int row] sets a new bookmark at the row given as an argument.
+.SS set-bookmark-on-line: sets a new bookmark at the current row.
+.SS remove-bookmark: [int row] removes the bookmark at the row given as an argument.
+.SS remove-bookmark-on-line: removes the bookmark at the current row.
+.SS goto-next-bookmark-in-buffer: moves the cursor to the next bookmarked line.
+.SS goto-prev-bookmark-in-buffer: moves the cursor to the previous bookmarked line.
 .SH BUFFERS
 None
 .SH NOTES
