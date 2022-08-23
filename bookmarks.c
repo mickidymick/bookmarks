@@ -43,6 +43,7 @@ void remove_bookmark(int nargs, char **args);
 void remove_bookmark_on_line(int nargs, char **args);
 void goto_next_bookmark_in_buffer(int nargs, char **args);
 void goto_prev_bookmark_in_buffer(int nargs, char **args);
+void remove_all_bookmarks_in_buffer(int nargs, char **args);
 
 int yed_plugin_boot(yed_plugin *self) {
     yed_event_handler h1;
@@ -75,6 +76,7 @@ int yed_plugin_boot(yed_plugin *self) {
     yed_plugin_set_command(self, "remove-bookmark-on-line", remove_bookmark_on_line);
     yed_plugin_set_command(self, "goto-next-bookmark-in-buffer", goto_next_bookmark_in_buffer);
     yed_plugin_set_command(self, "goto-prev-bookmark-in-buffer", goto_prev_bookmark_in_buffer);
+    yed_plugin_set_command(self, "remove-all-bookmarks-in-buffer", remove_all_bookmarks_in_buffer);
 
     if (yed_get_var("bookmark-character") == NULL) {
         yed_set_var("bookmark-character", "▓");
@@ -281,6 +283,42 @@ static void _remove(yed_frame *frame, int row) {
         }
     } else {
         yed_cerr("No bookmark exists for this line!\n");
+    }
+
+    _write_back_bookmarks();
+}
+
+void remove_all_bookmarks_in_buffer(int nargs, char **args) {
+    yed_frame       *frame;
+    char             file_name[512];
+    bookmark_data_t  tmp;
+    int              idx;
+    int              j;
+    int              found;
+    int             *r_it;
+
+
+    frame = ys->active_frame;
+
+    if (!frame
+    ||  !frame->buffer
+    ||  frame->buffer->path == NULL
+    ||  frame->buffer->kind != BUFF_KIND_FILE) {
+        return;
+    }
+
+    tree_it(yedrc_path_t, bookmark_data_t) it;
+    abs_path(frame->buffer->path, file_name);
+
+    it = tree_lookup(bookmarks, file_name);
+    found = 0;
+    if ( tree_it_good(it) ) {
+        array_clear(tree_it_val(it).rows);
+        LOG_FN_ENTER();
+        yed_log("All bookmarks removed from %s\n", frame->name);
+        LOG_EXIT();
+    } else {
+        yed_cerr("No bookmark exists for %s!\n", frame->name);
     }
 
     _write_back_bookmarks();
