@@ -14,6 +14,9 @@ do {                                                       \
 #define DBG(...) ;
 #endif
 
+//saving these for later
+//
+
 typedef struct bookmark_data {
     array_t rows;
 }bookmark_data_t;
@@ -77,6 +80,10 @@ int yed_plugin_boot(yed_plugin *self) {
         yed_set_var("bookmark-character", "▓");
     }
 
+    if (yed_get_var("bookmark-color") == NULL) {
+        yed_set_var("bookmark-color", "&blue");
+    }
+
     return 0;
 }
 
@@ -91,6 +98,7 @@ void _bookmarks_line_handler(yed_event *event) {
     yed_frame       *frame;
     int             *r_it;
     int              found;
+    char            *color_var;
 
     if (event->frame->buffer == NULL
     ||  (event->frame->buffer->name
@@ -141,11 +149,15 @@ void _bookmarks_line_handler(yed_event *event) {
     array_clear(event->gutter_glyphs);
     array_push_n(event->gutter_glyphs, num_buff, strlen(num_buff));
 
-/*     attr = yed_get_active_style_scomp(scomp_save); */
+    attr = yed_parse_attrs("&blue");
 
-/*     array_traverse(event->gutter_attrs, dst) { */
-/*         yed_combine_attrs(dst, &attr); */
-/*     } */
+    if ((color_var = yed_get_var("bookmark-color"))) {
+        attr = yed_parse_attrs(color_var);
+    }
+
+    array_traverse(event->gutter_attrs, dst) {
+        yed_combine_attrs(dst, &attr);
+    }
 }
 
 static void _unload(yed_plugin *self) {
