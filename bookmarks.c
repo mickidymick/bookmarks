@@ -55,6 +55,7 @@ void goto_next_bookmark_in_buffer(int nargs, char **args);
 void goto_prev_bookmark(int nargs, char **args);
 void goto_prev_bookmark_in_buffer(int nargs, char **args);
 void remove_all_bookmarks_in_buffer(int nargs, char **args);
+void _bookmarks(int nargs, char **args);
 
 int yed_plugin_boot(yed_plugin *self) {
     yed_event_handler h1;
@@ -66,8 +67,8 @@ int yed_plugin_boot(yed_plugin *self) {
 
     YED_PLUG_VERSION_CHECK();
 
-    bookmarks_initialized   = 0;
-    Self                    = self;
+    bookmarks_initialized = 0;
+    Self                  = self;
 
     yed_plugin_set_unload_fn(self, _unload);
 
@@ -82,6 +83,7 @@ int yed_plugin_boot(yed_plugin *self) {
     yed_plugin_set_command(self, "goto-prev-bookmark", goto_prev_bookmark);
     yed_plugin_set_command(self, "goto-prev-bookmark-in-buffer", goto_prev_bookmark_in_buffer);
     yed_plugin_set_command(self, "remove-all-bookmarks-in-buffer", remove_all_bookmarks_in_buffer);
+    yed_plugin_set_command(self, "bookmarks", _bookmarks);
 
     if (yed_get_var("bookmark-character") == NULL) {
         yed_set_var("bookmark-character", "▓");
@@ -142,6 +144,16 @@ int yed_plugin_boot(yed_plugin *self) {
     yed_plugin_add_event_handler(self, h6);
 
     return 0;
+}
+
+void _bookmarks(int nargs, char **args) {
+    YEXE("special-buffer-prepare-focus", "*bookmarks-list");
+
+    if (ys->active_frame) {
+        YEXE("buffer", "*bookmarks-list");
+    }
+
+    yed_set_cursor_far_within_frame(ys->active_frame, 1, 1);
 }
 
 static void _special_buffer_key_pressed_handler(yed_event *event) {
