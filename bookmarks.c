@@ -44,6 +44,7 @@ static int         _cmpintp(const void *a, const void *b);
 static void        _update_bookmarks(yed_event *event);
 static void        _update_special_buffer(yed_event *event);
 static void        _special_buffer_line_handler(yed_event *event);
+static void        _special_buffer_key_pressed_handler(yed_event *event);
 
 void set_new_bookmark(int nargs, char **args);
 void set_new_bookmark_on_line(int nargs, char **args);
@@ -61,6 +62,7 @@ int yed_plugin_boot(yed_plugin *self) {
     yed_event_handler h3;
     yed_event_handler h4;
     yed_event_handler h5;
+    yed_event_handler h6;
 
     YED_PLUG_VERSION_CHECK();
 
@@ -135,7 +137,46 @@ int yed_plugin_boot(yed_plugin *self) {
     h5.fn   = _special_buffer_line_handler;
     yed_plugin_add_event_handler(self, h5);
 
+    h6.kind = EVENT_KEY_PRESSED;
+    h6.fn   = _special_buffer_key_pressed_handler;
+    yed_plugin_add_event_handler(self, h6);
+
     return 0;
+}
+
+static void _special_buffer_key_pressed_handler(yed_event *event) {
+    yed_frame *eframe;
+    int       *r_it;
+    int        loc;
+
+    eframe = ys->active_frame;
+
+    if (event->key != ENTER
+    ||  ys->interactive_command
+    ||  !eframe
+    ||  !eframe->buffer
+    ||  !ys->active_frame
+    ||  strcmp(eframe->buffer->name, "*bookmarks-list")) {
+        return;
+    }
+
+    loc = 1;
+    tree_it(yedrc_path_t, bookmark_data_t) it;
+    tree_traverse(bookmarks, it) {
+        array_traverse(tree_it_val(it).rows, r_it) {
+            if (loc == ys->active_frame->cursor_line) {
+                YEXE("special-buffer-prepare-jump-focus", tree_it_key(it));
+                YEXE("buffer", tree_it_key(it));
+                if (ys->active_frame) {
+                    yed_set_cursor_far_within_frame(ys->active_frame, *r_it, ys->active_frame->cursor_col);
+                }
+                goto done;
+            }
+            loc++;
+        }
+    }
+done:;
+    event->cancel = 1;
 }
 
 static void _special_buffer_line_handler(yed_event *event) {
@@ -205,7 +246,7 @@ static void _update_special_buffer(yed_event *event) {
     time_t      curr_time;
     char       *path;
     char        line[512];
-    yed_line   *str;
+    char       *str;
 
     curr_time = time(NULL);
     if (curr_time > last_time + wait_time) {
@@ -238,11 +279,19 @@ static void _update_special_buffer(yed_event *event) {
                 path = (char *)malloc(sizeof(char[512]));
                 path = relative_path_if_subtree(tree_it_key(it), path);
                 buffer = yed_get_buffer_by_path(tree_it_key(it));
-                str = yed_buff_get_line(buffer, *r_it);
-                sprintf(line, "%*s %-*d %s", path_width, path, row_width, *r_it, str->chars.data);
-                free(path);
-                yed_buff_insert_string_no_undo(buff, line, new_idx, 1);
-                new_idx++;
+                if (!buffer) {
+                    YEXE("buffer-hidden", tree_it_key(it));
+                    buffer = yed_get_buffer_by_path(tree_it_key(it));
+                }
+                if (buffer) {
+                    str = yed_get_line_text(buffer, *r_it);
+                    if (str) {
+                        sprintf(line, "%*s %-*d %s", path_width, path, row_width, *r_it, str);
+                        free(path);
+                        yed_buff_insert_string_no_undo(buff, line, new_idx, 1);
+                        new_idx++;
+                    }
+                }
             }
         }
 
