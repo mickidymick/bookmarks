@@ -2,3 +2,4 @@
 *.so
 *.bookmarks
 .ccls-cache
+*.json
