@@ -1001,7 +1001,7 @@ static void _init_bookmarks(yed_event *event) {
         last_path = strdup(tmp_path);
     }
 
-    if (tmp_path != NULL) {
+    if (first != 1 && tmp_path != NULL) {
         qsort((void *)tmp.rows.data, array_len(tmp.rows), sizeof(int), _cmpintp);
         tree_insert(bookmarks, strdup(tmp_path), tmp);
     }
