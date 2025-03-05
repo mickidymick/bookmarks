@@ -153,8 +153,8 @@ int yed_plugin_boot(yed_plugin *self) {
     h6.fn   = _special_buffer_key_pressed_handler;
     yed_plugin_add_event_handler(self, h6);
 
-    line.kind             = EVENT_LINE_PRE_DRAW;
-    line.fn               = _line_numbers_line_handler;
+    line.kind = EVENT_LINE_PRE_DRAW;
+    line.fn   = _line_numbers_line_handler;
     yed_plugin_add_event_handler(self, line);
 
     frame_pre_update.kind = EVENT_FRAME_PRE_UPDATE;
