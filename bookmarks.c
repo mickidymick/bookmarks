@@ -517,6 +517,7 @@ static void _unload(yed_plugin *self) {
     array_traverse(ys->frames, fit) {
         yed_frame_set_gutter_width(*fit, 0);
     }
+    _write_back_bookmarks();
 }
 
 static int _cmpintp(const void *a, const void *b) {
@@ -811,6 +812,7 @@ void remove_all_bookmarks_in_buffer(int nargs, char **args) {
     found = 0;
     if ( tree_it_good(it) ) {
         array_clear(tree_it_val(it).rows);
+        tree_delete(bookmarks, tree_it_key(it));
         LOG_FN_ENTER();
         yed_log("All bookmarks removed from %s\n", frame->name);
         LOG_EXIT();
@@ -1028,12 +1030,20 @@ void _write_back_bookmarks(void) {
         return;
     }
 
+    fp = NULL;
+
     if (!ys->options.no_init) {
         getcwd(cwd, sizeof(cwd));
         memset(loc_file, 0, sizeof(loc_file[1024]));
         strcat(loc_file, cwd);
         strcat(loc_file, "/");
         strcat(loc_file, file);
+
+        if (tree_len(bookmarks) == 0) {
+            remove(loc_file);
+            return;
+        }
+
         fp = fopen (loc_file, "w+");
     }
 
